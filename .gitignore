@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.qa/
+exit-outbound.json
+node.json
+vless.txt
