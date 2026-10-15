@@ -7,6 +7,12 @@ exit_name="$suffix-exit"
 relay_name="$suffix-relay"
 tmp=$(mktemp -d)
 cleanup() {
+    local result=$?
+    if [[ $result != 0 ]]; then
+        for name in "$exit_name" "$relay_name"; do
+            docker exec "$name" sh -c 'cat /tmp/bootstrap.log; rc-status -a; ls -lR /run/openrc; cat /etc/init.d/vless-chain; ps' 2>&1 || true
+        done
+    fi
     docker rm -f "$exit_name" "$relay_name" >/dev/null 2>&1 || true
     docker network rm "$network" >/dev/null 2>&1 || true
     [[ $tmp == /tmp/* && -d $tmp ]] && rm -rf -- "$tmp"
@@ -17,7 +23,7 @@ for name in "$exit_name" "$relay_name"; do
     docker run -d --name "$name" --network "$network" \
       -v "$PWD/install-vless-chain.sh:/install.sh:ro" "alpine:$ALPINE_VERSION" sh -c '
         apk add --no-cache bash curl ca-certificates openrc >/tmp/bootstrap.log 2>&1 || exit 1
-        mkdir -p /run/openrc; touch /run/openrc/softlevel /tmp/ready
+        mkdir -p /run/openrc; rc-status >/dev/null 2>&1; touch /run/openrc/softlevel /tmp/ready
         exec tail -f /dev/null' >/dev/null
     for _ in {1..60}; do
         docker exec "$name" test -f /tmp/ready && break

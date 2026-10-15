@@ -96,7 +96,7 @@ validate_bundle() {
     local server sni ip
     server=$(jq -r '.outbound.server' "$file"); sni=$(jq -r '.outbound.tls.server_name' "$file")
     ip=$(jq -r '.exit_ip' "$file")
-    valid_host "$server" && valid_host "$sni" && valid_host "$ip" || die 'Invalid bundle host.'
+    if ! valid_host "$server" || ! valid_host "$sni" || ! valid_host "$ip"; then die 'Invalid bundle host.'; fi
     [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 'Bundle requires the measured IPv4 exit IP.'
     # Reconstruct a small allowlist. Do not inherit detour, TLS bypasses or extra routing options.
     outbound_json "$server" "$(jq -r '.outbound.server_port' "$file")" \
@@ -230,7 +230,9 @@ health_test() {
             --connect-timeout 5 --max-time 15 https://api.ipify.org 2>/dev/null); then break; fi
     done
     kill "$CLIENT_PID" 2>/dev/null || true; wait "$CLIENT_PID" 2>/dev/null || true; CLIENT_PID=''
-    valid_host "$ip" && [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 'VLESS REALITY health test failed; installation will roll back.'
+    if ! valid_host "$ip" || [[ ! $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        die 'VLESS REALITY health test failed; installation will roll back.'
+    fi
     if [[ $ROLE == relay && $ip != "$EXIT_IP" ]]; then die "Unexpected exit IP: $ip (expected $EXIT_IP)."; fi
     EXIT_IP=$ip
     log "Authenticated proxy test passed; measured exit IPv4: $EXIT_IP"
@@ -254,7 +256,7 @@ export_node() {
 main() {
     case ${1:---help} in -h|--help|help) usage; return;; esac
     [[ $(id -u) == 0 ]] || die 'Run as root.'
-    [[ -f /etc/alpine-release ]] && command -v rc-service >/dev/null || die 'Requires Alpine Linux with OpenRC.'
+    if [[ ! -f /etc/alpine-release ]] || ! command -v rc-service >/dev/null; then die 'Requires Alpine Linux with OpenRC.'; fi
     if [[ ${1:-} == status ]]; then
         rc-service "$SERVICE" status
         [[ ! -f $CONF/vless.txt ]] || log "Node URI: $CONF/vless.txt (root only)"
@@ -287,14 +289,15 @@ main() {
     ask PUBLIC_PORT 'Public TCP port' "$old_public"
     ask LISTEN_PORT 'Container listen TCP port' "$old_listen"
     ask SNI 'REALITY handshake SNI' "$old_sni"
-    valid_host "$PUBLIC_HOST" && valid_host "$SNI" || die 'Invalid public host or SNI.'
+    if ! valid_host "$PUBLIC_HOST" || ! valid_host "$SNI"; then die 'Invalid public host or SNI.'; fi
     [[ $SNI == *.* && ! $SNI =~ ^[0-9.]+$ ]] || die 'SNI must be a DNS name.'
-    valid_port "$PUBLIC_PORT" && valid_port "$LISTEN_PORT" || die 'Ports must be integers from 1 to 65535.'
+    if ! valid_port "$PUBLIC_PORT" || ! valid_port "$LISTEN_PORT"; then die 'Ports must be integers from 1 to 65535.'; fi
     [[ $LISTEN_PORT -gt 20000 && $PUBLIC_PORT -gt 20000 ]] || die 'Choose NAT proxy ports above 20000.'
     if [[ -n $(ss -H -lnt "sport = :$LISTEN_PORT") ]]; then
-        [[ -f $CONF/managed && -f $CONF/config.json ]] &&
+        if [[ -f $CONF/managed && -f $CONF/config.json ]] &&
           [[ $(jq -r '.inbounds[0].listen_port' "$CONF/config.json") == "$LISTEN_PORT" ]] &&
-          rc-service "$SERVICE" status >/dev/null 2>&1 || die "TCP $LISTEN_PORT is already in use. Choose a free mapped port."
+          rc-service "$SERVICE" status >/dev/null 2>&1; then :
+        else die "TCP $LISTEN_PORT is already in use. Choose a free mapped port."; fi
     fi
     WORK=$(mktemp -d /tmp/vless-chain.XXXXXX)
     local out keys
