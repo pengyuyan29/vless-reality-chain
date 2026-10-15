@@ -1,6 +1,7 @@
 name: Validate installer
 on:
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
@@ -38,4 +39,4 @@ jobs:
       - name: Install both roles in fresh Alpine containers
         env:
           ALPINE_VERSION: ${{ matrix.alpine }}
-        run: bash tests/integration.sh
+        run: timeout 480 bash tests/integration.sh

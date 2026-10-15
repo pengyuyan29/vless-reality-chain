@@ -95,7 +95,7 @@ printf 'old-service' > {shlex.quote(base)}/old/service
 printf '1 1 1 1 1\\n' > {shlex.quote(base)}/old/state
 printf 'new-config' > "$CONF/config.json"
 printf 'new-binary' > "$BIN"; printf 'new-service' > "$INIT"
-rc-service() {{ printf '%s\\n' "$*" >> {shlex.quote(base)}/service-calls; }}
+service_cmd() {{ printf '%s\\n' "$SERVICE $*" >> {shlex.quote(base)}/service-calls; }}
 rc-update() {{ :; }}; chown() {{ :; }}
 restore_backup {shlex.quote(base)}/old
 test "$(cat "$CONF/config.json")" = old-config

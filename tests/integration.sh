@@ -10,7 +10,7 @@ cleanup() {
     local result=$?
     if [[ $result != 0 ]]; then
         for name in "$exit_name" "$relay_name"; do
-            docker exec "$name" sh -c 'cat /tmp/bootstrap.log; rc-status -a; ls -lR /run/openrc; cat /etc/init.d/vless-chain; ps' 2>&1 || true
+            docker exec "$name" sh -c 'cat /tmp/bootstrap.log; timeout 10 rc-status -a; ls -lR /run/openrc; cat /etc/init.d/vless-chain; ps' 2>&1 || true
         done
     fi
     docker rm -f "$exit_name" "$relay_name" >/dev/null 2>&1 || true
@@ -20,7 +20,7 @@ cleanup() {
 trap cleanup EXIT
 docker network create "$network" >/dev/null
 for name in "$exit_name" "$relay_name"; do
-    docker run -d --name "$name" --network "$network" \
+    docker run --init -d --name "$name" --network "$network" \
       -v "$PWD/install-vless-chain.sh:/install.sh:ro" "alpine:$ALPINE_VERSION" sh -c '
         apk add --no-cache bash curl ca-certificates openrc >/tmp/bootstrap.log 2>&1 || exit 1
         mkdir -p /run/openrc; rc-status >/dev/null 2>&1; touch /run/openrc/softlevel /tmp/ready

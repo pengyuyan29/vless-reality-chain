@@ -16,6 +16,7 @@ UUID='' PRIVATE_KEY='' PUBLIC_KEY='' SHORT_ID='' EXIT_IP=''
 
 log() { printf '[vless-chain] %s\n' "$*" >&2; }
 die() { log "$*"; exit 1; }
+service_cmd() { timeout 30 rc-service "$SERVICE" "$@"; }
 usage() {
     cat <<'HELP'
 Usage: bash install-vless-chain.sh exit|relay [options]
@@ -145,7 +146,7 @@ snapshot() {
     fi
     if [[ -f $INIT ]]; then
         cp -p "$INIT" "$dir/service" || return 1; had_init=1
-        if rc-service "$SERVICE" status >/dev/null 2>&1; then running=1; fi
+        if service_cmd status >/dev/null 2>&1; then running=1; fi
     fi
     if [[ -L /etc/runlevels/default/vless-chain ]]; then enabled=1; fi
     printf '%s %s %s %s %s\n' "$had_conf" "$had_bin" "$had_init" "$running" "$enabled" > "$dir/state" || return 1
@@ -156,7 +157,7 @@ restore_backup() {
     [[ -f $dir/state && ! -L $dir ]] || return 1
     read -r had_conf had_bin had_init running enabled < "$dir/state"
     [[ "$had_conf $had_bin $had_init $running $enabled" =~ ^[01]\ [01]\ [01]\ [01]\ [01]$ ]] || return 1
-    if [[ -f $INIT ]]; then rc-service "$SERVICE" stop >/dev/null 2>&1 || true; fi
+    if [[ -f $INIT ]]; then service_cmd stop >/dev/null 2>&1 || return 1; fi
     [[ $had_conf == 0 || -f $dir/config/managed ]] || return 1
     [[ $had_bin == 0 || -f $dir/binary ]] || return 1
     [[ $had_init == 0 || -f $dir/service ]] || return 1
@@ -173,7 +174,7 @@ restore_backup() {
     if [[ $had_init == 1 ]]; then cp -p "$dir/service" "$INIT" || return 1; else rm -f "$INIT"; fi
     if [[ $enabled == 1 ]]; then rc-update add "$SERVICE" default >/dev/null || return 1
     else rc-update del "$SERVICE" default >/dev/null 2>&1 || true; fi
-    if [[ $running == 1 ]]; then rc-service "$SERVICE" start || return 1; fi
+    if [[ $running == 1 ]]; then service_cmd start || return 1; fi
     return 0
 }
 cleanup() {
@@ -258,7 +259,7 @@ main() {
     [[ $(id -u) == 0 ]] || die 'Run as root.'
     if [[ ! -f /etc/alpine-release ]] || ! command -v rc-service >/dev/null; then die 'Requires Alpine Linux with OpenRC.'; fi
     if [[ ${1:-} == status ]]; then
-        rc-service "$SERVICE" status
+        service_cmd status
         [[ ! -f $CONF/vless.txt ]] || log "Node URI: $CONF/vless.txt (root only)"
         return
     fi
@@ -296,7 +297,7 @@ main() {
     if [[ -n $(ss -H -lnt "sport = :$LISTEN_PORT") ]]; then
         if [[ -f $CONF/managed && -f $CONF/config.json ]] &&
           [[ $(jq -r '.inbounds[0].listen_port' "$CONF/config.json") == "$LISTEN_PORT" ]] &&
-          rc-service "$SERVICE" status >/dev/null 2>&1; then :
+          service_cmd status >/dev/null 2>&1; then :
         else die "TCP $LISTEN_PORT is already in use. Choose a free mapped port."; fi
     fi
     WORK=$(mktemp -d /tmp/vless-chain.XXXXXX)
@@ -326,7 +327,7 @@ main() {
     render_config "$out" > "$WORK/config.json"
     "$WORK/sing-box" check -c "$WORK/config.json"
     SNAPSHOT=$(snapshot); ACTIVE=1
-    if [[ -f $INIT ]]; then rc-service "$SERVICE" stop >/dev/null 2>&1 || true; fi
+    if [[ -f $INIT ]]; then service_cmd stop >/dev/null 2>&1 || die 'Unable to stop the managed service within 30 seconds.'; fi
     getent group vless-chain >/dev/null || addgroup -S vless-chain
     id vless-chain >/dev/null 2>&1 || adduser -S -D -H -s /sbin/nologin -G vless-chain vless-chain
     install -d -m 755 /usr/local/lib/vless-chain
@@ -338,9 +339,9 @@ main() {
     mv -f "$CONF/config.json.next" "$CONF/config.json"
     printf 'vless-chain\n' > "$CONF/managed"
     service_text > "$INIT"; chmod 755 "$INIT"
-    rc-service "$SERVICE" start
+    service_cmd start
     health_test
-    rc-service "$SERVICE" status
+    service_cmd status
     export_node
     rc-update add "$SERVICE" default
     ACTIVE=0
