@@ -71,4 +71,12 @@ if check_relay >/dev/null 2>&1; then
 fi
 docker exec "$exit_name" rc-service vless-chain start
 check_relay >/dev/null
-echo "Alpine $ALPINE_VERSION: installation, key reuse, automatic rollback and no fallback passed."
+first_backup=$(docker exec "$relay_name" sh -c 'ls -1 /var/lib/vless-chain-backups | sort | head -n 1')
+previous_backups=$(docker exec "$relay_name" ls -1 /var/lib/vless-chain-backups)
+docker exec "$relay_name" bash /install.sh rollback "$first_backup"
+docker exec "$relay_name" sh -c 'test ! -e /etc/vless-chain/config.json; test ! -e /etc/init.d/vless-chain; test ! -L /etc/runlevels/default/vless-chain'
+restore_id=$(comm -13 <(printf '%s\n' "$previous_backups" | sort) \
+  <(docker exec "$relay_name" ls -1 /var/lib/vless-chain-backups | sort))
+docker exec "$relay_name" bash /install.sh rollback "$restore_id"
+check_relay >/dev/null
+echo "Alpine $ALPINE_VERSION: installation, key reuse, automatic/manual rollback and no fallback passed."

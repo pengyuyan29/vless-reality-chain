@@ -173,7 +173,7 @@ restore_backup() {
     else rm -f "$BIN"; fi
     if [[ $had_init == 1 ]]; then cp -p "$dir/service" "$INIT" || return 1; else rm -f "$INIT"; fi
     if [[ $enabled == 1 ]]; then rc-update add "$SERVICE" default >/dev/null || return 1
-    else rc-update del "$SERVICE" default >/dev/null 2>&1 || true; fi
+    else rm -f /etc/runlevels/default/vless-chain || return 1; fi
     if [[ $running == 1 ]]; then service_cmd start || return 1; fi
     return 0
 }
@@ -263,7 +263,7 @@ main() {
         [[ ! -f $CONF/vless.txt ]] || log "Node URI: $CONF/vless.txt (root only)"
         return
     fi
-    install -d -m 755 /run/lock
+    mkdir -p /run/lock
     mkdir /run/lock/vless-chain.lock 2>/dev/null || die 'Another installer is running, or its lock requires inspection.'
     LOCKED=1
     trap cleanup EXIT
