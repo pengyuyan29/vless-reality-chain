@@ -333,8 +333,11 @@ main() {
     install -d -m 755 /usr/local/lib/vless-chain
     install -d -m 750 -o root -g vless-chain "$CONF"
     install -d -m 700 -o vless-chain -g vless-chain /var/lib/vless-chain
-    install -m 755 "$WORK/sing-box" "$BIN.next"
-    mv -f "$BIN.next" "$BIN"
+    # Reuse an identical core so repeated backups share one inode on small NAT disks.
+    if [[ ! -f $BIN ]] || ! cmp -s "$WORK/sing-box" "$BIN"; then
+        install -m 755 "$WORK/sing-box" "$BIN.next"
+        mv -f "$BIN.next" "$BIN"
+    fi
     install -m 640 -o root -g vless-chain "$WORK/config.json" "$CONF/config.json.next"
     mv -f "$CONF/config.json.next" "$CONF/config.json"
     printf 'vless-chain\n' > "$CONF/managed"

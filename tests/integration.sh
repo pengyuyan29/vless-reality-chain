@@ -39,9 +39,11 @@ relay_install=(bash /install.sh relay --public-host "$relay_name" --public-port 
   --listen-port 24443 --sni www.cloudflare.com --exit-file /root/bundle.json)
 docker exec "$relay_name" "${relay_install[@]}" >/dev/null
 before=$(docker exec "$relay_name" sha256sum /etc/vless-chain/config.json)
+before_inode=$(docker exec "$relay_name" stat -c %i /usr/local/lib/vless-chain/sing-box)
 docker exec "$relay_name" "${relay_install[@]}" >/dev/null
 after=$(docker exec "$relay_name" sha256sum /etc/vless-chain/config.json)
 [[ $before == "$after" ]]
+[[ $(docker exec "$relay_name" stat -c %i /usr/local/lib/vless-chain/sing-box) == "$before_inode" ]]
 # A wrong expected exit must fail its health check and restore the active config.
 jq '.exit_ip="203.0.113.99"' "$tmp/bundle.json" > "$tmp/bad.json"
 docker cp "$tmp/bad.json" "$relay_name:/root/bundle.json"
